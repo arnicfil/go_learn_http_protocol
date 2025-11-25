@@ -3,6 +3,7 @@ package request
 import (
 	"errors"
 	"fmt"
+	"github.com/arnicfil/go_learn_http_protocol/internal/headers"
 	"io"
 	"strings"
 	"unicode"
@@ -12,12 +13,16 @@ type RequestState int
 
 const (
 	Initialized RequestState = iota
+	ParsingHeaders
 	Done
 )
+
+const bufferSize = 8
 
 type Request struct {
 	RequestLine RequestLine
 	State       RequestState
+	Headers     headers.Headers
 }
 
 type RequestLine struct {
@@ -27,50 +32,42 @@ type RequestLine struct {
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	buffer := make([]byte, 0, 8)
-	buf := make([]byte, 8)
+	buffer := make([]byte, bufferSize)
 
 	var req Request
 	req.State = Initialized
 
-	flag := false
-	for {
-		numBytesRead, err := reader.Read(buf)
-		if err != nil {
-			if err == io.EOF {
-				flag = true
-			} else {
-				return nil, fmt.Errorf("Error while reading from reader: %v", err)
-			}
-		}
+	readToIndex := 0
 
-		if len(buffer)+numBytesRead > cap(buffer) {
-			newCap := max(cap(buffer)*2, len(buffer)+numBytesRead)
-
-			newBuffer := make([]byte, len(buffer), newCap)
-			copy(newBuffer, buffer)
+	for req.State != Done {
+		if readToIndex == len(buffer) {
+			newBuffer := make([]byte, len(buffer)*2)
+			copy(newBuffer, buffer[:readToIndex])
 			buffer = newBuffer
 		}
 
-		buffer = append(buffer, buf[:numBytesRead]...)
-
-		bytesParsed, err := req.parse(buffer)
+		numBytesRead, err := reader.Read(buffer[readToIndex:])
 		if err != nil {
-			return nil, fmt.Errorf("Error while parsing bytes: %w", err)
+			if err == io.EOF {
+				if len(buffer) == 0 {
+					req.State = Done
+					break
+				}
+			}
+
+			return &Request{}, errors.New("Error while reading from reader: %w")
+		}
+		readToIndex += numBytesRead
+
+		numBytesParsed, err := req.parse(buffer)
+		if err != nil {
+			return &Request{}, fmt.Errorf("Error while parsing data: %v", err)
 		}
 
-		if req.State == Done || flag {
-			break
+		if numBytesParsed > 0 {
+			copy(buffer, buffer[numBytesParsed:readToIndex])
+			readToIndex -= numBytesParsed
 		}
-
-		if bytesParsed == 0 {
-			continue
-		}
-
-	}
-
-	if flag && req.State != Done {
-		return &Request{}, errors.New("Error EOF before a request line")
 	}
 
 	return &req, nil
@@ -117,11 +114,28 @@ func (r *Request) parse(data []byte) (int, error) {
 		if numBytesParsed == 0 {
 			return 0, nil
 		}
-		if numBytesParsed > 0 {
-			r.RequestLine = newRequestLine
-			r.State = Done
-			return numBytesParsed, nil
+
+		r.RequestLine = newRequestLine
+		r.State = ParsingHeaders
+		return numBytesParsed, nil
+	case ParsingHeaders:
+		if r.Headers == nil {
+			r.Headers = headers.NewHeaders()
 		}
+
+		numBytesParsed, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		}
+		if numBytesParsed == 0 {
+			return 0, nil
+		}
+
+		if done {
+			r.State = Done
+		}
+
+		return numBytesParsed, nil
 	case Done:
 		return 0, errors.New("Error trying to read data in a done state")
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/arnicfil/go_learn_http_protocol/internal/request"
 	"io"
 	"log"
 	"net"
@@ -24,21 +25,20 @@ func main() {
 		}
 		fmt.Println("Connection has been accepted")
 
-		ch := getLinesChannel(conn)
-		for line := range ch {
-			fmt.Println("read: " + line)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			fmt.Printf("Error while reading from connection: %v", err)
+			return
 		}
+
+		fmt.Println("Requst line:")
+		fmt.Printf("- Method: %v\n", req.RequestLine.Method)
+		fmt.Printf("- Target: %v\n", req.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %v\n", req.RequestLine.HttpVersion)
 
 		fmt.Println("Connection has been closed")
 	}
 
-}
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	stChan := make(chan string)
-	go routine(stChan, f)
-
-	return stChan
 }
 
 func routine(ch chan string, f io.ReadCloser) {
