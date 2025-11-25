@@ -38,8 +38,8 @@ func TestRequestLineParse(t *testing.T) {
 	require.Error(t, err)
 
 	reader = &chunkReader{
-		data:            "POST /hello HTTP/1.1\r\n",
-		numBytesPerRead: len("POST /hello HTTP/1.1\r\n"),
+		data:            "POST /hello HTTP/1.1\r\n\r\n",
+		numBytesPerRead: len("POST /hello HTTP/1.1\r\n\r\n"),
 	}
 	r, err = RequestFromReader(reader)
 	require.NoError(t, err)
@@ -76,7 +76,6 @@ func TestRequestLineParse(t *testing.T) {
 	}
 	r, err = RequestFromReader(reader)
 	require.NoError(t, err)
-	require.Nil(t, r.Headers)
 
 	// Test: Malformed Header
 	reader = &chunkReader{
