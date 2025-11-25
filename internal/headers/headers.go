@@ -2,6 +2,7 @@ package headers
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"unicode"
 )
@@ -34,6 +35,7 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 	parts := strings.SplitN(line, ":", 2)
 	if len(parts) != 2 {
+		fmt.Println(parts)
 		return 0, false, ERROR_MALFORMED
 	}
 
@@ -52,6 +54,11 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	h[headerName] = headerValue
 
 	return bytesConsumed, false, nil
+}
+
+func (h Headers) Get(key string) (string, bool) {
+	val, ok := h[strings.ToLower(key)]
+	return val, ok
 }
 
 func validateHeaderName(s string) bool {

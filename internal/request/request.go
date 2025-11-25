@@ -3,10 +3,12 @@ package request
 import (
 	"errors"
 	"fmt"
-	"github.com/arnicfil/go_learn_http_protocol/internal/headers"
 	"io"
+	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/arnicfil/go_learn_http_protocol/internal/headers"
 )
 
 type RequestState int
@@ -14,15 +16,19 @@ type RequestState int
 const (
 	Initialized RequestState = iota
 	ParsingHeaders
+	ParsingBody
 	Done
 )
 
 const bufferSize = 8
 
+var ERORR_LEN = errors.New("Error body length is greater that reported in header")
+
 type Request struct {
 	RequestLine RequestLine
 	state       RequestState
 	Headers     headers.Headers
+	Body        []byte
 }
 
 type RequestLine struct {
@@ -148,10 +154,33 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 
 		if done {
-			r.state = Done
+			r.state = ParsingBody
 		}
 
 		return numBytesParsed, nil
+	case ParsingBody:
+		val, ok := r.Headers.Get("Content-Length")
+		if !ok {
+			r.state = Done
+			return 0, nil
+		}
+
+		r.Body = append(r.Body, data...)
+		reportedLen, err := strconv.Atoi(val)
+		if err != nil {
+			return 0, errors.New("header malformed in body")
+			//return 0, headers.ERROR_MALFORMED
+		}
+
+		if len(r.Body) > reportedLen {
+			return 0, ERORR_LEN
+		}
+
+		if len(r.Body) == reportedLen {
+			r.state = Done
+		}
+
+		return len(data), nil
 	case Done:
 		return 0, errors.New("Error trying to read data in a done state")
 	}
