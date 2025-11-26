@@ -111,7 +111,6 @@ func parseRequestLine(data string) (RequestLine, int, error) {
 func (r *Request) parse(data []byte) (int, error) {
 	totalBytesParsed := 0
 	for r.state != Done {
-		fmt.Printf("Parsing \"%s\"\n", string(data))
 		numBytesParsed, err := r.parseSingle(data[totalBytesParsed:])
 		if err != nil {
 			return 0, fmt.Errorf("Error while parsing data in state %d: %v", r.state, err)

@@ -2,7 +2,6 @@ package headers
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"unicode"
 )
@@ -26,7 +25,7 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	sData := string(data)
 	if !strings.Contains(sData, clrf) {
 		return 0, false, nil
-	} else if sData == clrf {
+	} else if len(sData) >= 2 && sData[0:2] == clrf {
 		return 2, true, nil
 	}
 
@@ -35,7 +34,6 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 	parts := strings.SplitN(line, ":", 2)
 	if len(parts) != 2 {
-		fmt.Println(parts)
 		return 0, false, ERROR_MALFORMED
 	}
 
