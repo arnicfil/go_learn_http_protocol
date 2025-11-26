@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/arnicfil/go_learn_http_protocol/internal/request"
 	"io"
 	"log"
 	"net"
 	"strings"
+
+	"github.com/arnicfil/go_learn_http_protocol/internal/request"
 )
 
 func main() {
@@ -39,6 +40,8 @@ func main() {
 		for key, val := range req.Headers {
 			fmt.Printf("- %s: %s\n", key, val)
 		}
+		fmt.Println("Body:")
+		fmt.Print(string(req.Body) + "\n")
 
 		fmt.Println("Connection has been closed")
 	}

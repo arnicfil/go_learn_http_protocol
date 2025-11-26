@@ -59,6 +59,10 @@ func (h Headers) Get(key string) (string, bool) {
 	return val, ok
 }
 
+func (h Headers) Set(key string, val string) {
+	h[strings.ToLower(key)] = val
+}
+
 func validateHeaderName(s string) bool {
 	for _, char := range s {
 		if !unicode.IsLetter(rune(char)) && !unicode.IsDigit(rune(char)) && !strings.Contains("!#$%&'*+-.^_`|~", string(char)) {
