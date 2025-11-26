@@ -111,9 +111,10 @@ func parseRequestLine(data string) (RequestLine, int, error) {
 func (r *Request) parse(data []byte) (int, error) {
 	totalBytesParsed := 0
 	for r.state != Done {
+		fmt.Printf("Parsing \"%s\"\n", string(data))
 		numBytesParsed, err := r.parseSingle(data[totalBytesParsed:])
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("Error while parsing data in state %d: %v", r.state, err)
 		}
 
 		if numBytesParsed == 0 {
@@ -139,7 +140,9 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 
 		r.RequestLine = newRequestLine
 		r.state = ParsingHeaders
+
 		return numBytesParsed, nil
+
 	case ParsingHeaders:
 		if r.Headers == nil {
 			r.Headers = headers.NewHeaders()
@@ -158,6 +161,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 
 		return numBytesParsed, nil
+
 	case ParsingBody:
 		val, ok := r.Headers.Get("Content-Length")
 		if !ok {
@@ -168,8 +172,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		r.Body = append(r.Body, data...)
 		reportedLen, err := strconv.Atoi(val)
 		if err != nil {
-			return 0, errors.New("header malformed in body")
-			//return 0, headers.ERROR_MALFORMED
+			return 0, headers.ERROR_MALFORMED
 		}
 
 		if len(r.Body) > reportedLen {
@@ -181,6 +184,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 
 		return len(data), nil
+
 	case Done:
 		return 0, errors.New("Error trying to read data in a done state")
 	}
