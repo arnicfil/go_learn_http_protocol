@@ -1,6 +1,7 @@
 package response
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -11,10 +12,12 @@ import (
 type StatusCode int
 
 const (
-	StatusOK StatusCode = iota
-	StatusBadRequest
-	StatusInternalServerError
+	StatusOK StatusCode = 200
+	StatusBadRequest StatusCode = 400
+	StatusInternalServerError StatusCode = 500
 )
+
+var ERROR_LEN_MISSMATCH = errors.New("Error writing len mismatch")
 
 func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 	var err error = nil
@@ -43,4 +46,33 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	hdrs.Set("Content-Type", "text/plain")
 
 	return hdrs
+}
+
+func WriteHeaders(w io.Writer, hdrs headers.Headers) error {
+	for headerKey, headerVal := range hdrs {
+		data := fmt.Appendf(nil, "%s: %s", headerKey, headerVal)
+		numBytesWritten, err := w.Write(data)
+		if err != nil {
+			return fmt.Errorf("Error while writing into writer: %w", err)
+		}
+
+		if numBytesWritten != len(data) {
+			return ERROR_LEN_MISSMATCH
+		}
+	}
+
+	return nil
+}
+
+func WriteBody(w io.Writer, data []byte) error {
+	numBytesWritten, err := w.Write(data)
+	if err != nil {
+		return fmt.Errorf("Error while writing data to writer: %w", err)
+	}
+
+	if numBytesWritten != len(data) {
+		return ERROR_LEN_MISSMATCH
+	}
+
+	return nil
 }
