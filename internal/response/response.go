@@ -12,8 +12,8 @@ import (
 type StatusCode int
 
 const (
-	StatusOK StatusCode = 200
-	StatusBadRequest StatusCode = 400
+	StatusOK                                   StatusCode = 200
+	StatusBadRequest                   StatusCode = 400
 	StatusInternalServerError StatusCode = 500
 )
 
@@ -23,13 +23,13 @@ func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 	var err error = nil
 	switch statusCode {
 	case StatusOK:
-		_, err = w.Write([]byte("HTTP/1.1 200 OK"))
+		_, err = w.Write([]byte("HTTP/1.1 200 OK\r\n"))
 	case StatusBadRequest:
-		_, err = w.Write([]byte("HTTP/1.1 400 Bad Request"))
+		_, err = w.Write([]byte("HTTP/1.1 400 Bad Request\r\n"))
 	case StatusInternalServerError:
-		_, err = w.Write([]byte("HTTP/1.1 500 Internal Server Error"))
+		_, err = w.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n"))
 	default:
-		_, err = w.Write(fmt.Appendf(nil, "HTTP/1.1 %d", statusCode))
+		_, err = w.Write(fmt.Appendf(nil, "HTTP/1.1 %d\r\n", statusCode))
 	}
 
 	if err != nil {
@@ -50,7 +50,7 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 
 func WriteHeaders(w io.Writer, hdrs headers.Headers) error {
 	for headerKey, headerVal := range hdrs {
-		data := fmt.Appendf(nil, "%s: %s", headerKey, headerVal)
+		data := fmt.Appendf(nil, "%s: %s\r\n", headerKey, headerVal)
 		numBytesWritten, err := w.Write(data)
 		if err != nil {
 			return fmt.Errorf("Error while writing into writer: %w", err)
@@ -59,6 +59,15 @@ func WriteHeaders(w io.Writer, hdrs headers.Headers) error {
 		if numBytesWritten != len(data) {
 			return ERROR_LEN_MISSMATCH
 		}
+	}
+
+	numBytesWritten, err := w.Write([]byte("\r\n"))
+	if err != nil {
+		return fmt.Errorf("Error while writing into writer: %w", err)
+	}
+
+	if numBytesWritten != 2 {
+		return ERROR_LEN_MISSMATCH
 	}
 
 	return nil
