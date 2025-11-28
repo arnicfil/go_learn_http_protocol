@@ -55,12 +55,23 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 }
 
 func (h Headers) Get(key string) (string, bool) {
-	val, ok := h[strings.ToLower(key)]
+	lowerKey := strings.ToLower(key)
+	val, ok := h[lowerKey]
 	return val, ok
 }
 
 func (h Headers) Set(key string, val string) {
-	h[strings.ToLower(key)] = val
+	lowerKey := strings.ToLower(key)
+	headerVal, ok := h[lowerKey]
+	if ok {
+		val = headerVal + ", " + val
+	}
+
+	h[lowerKey] = val
+}
+
+func (h Headers) Remove(key string) {
+	delete(h, strings.ToLower(key))
 }
 
 func validateHeaderName(s string) bool {

@@ -23,6 +23,7 @@ const (
 	WritingStatusLine StatusWriter = iota
 	WritingHeaders
 	WritingBody
+	WritingTrailers
 )
 
 type Writer struct {
@@ -36,6 +37,8 @@ func NewWriter(w io.Writer) *Writer {
 		writingStatus: WritingStatusLine,
 	}
 }
+
+const chunkSize = 10
 
 var ERROR_LEN_MISSMATCH = errors.New("Error writing len mismatch")
 var ERROR_WRITING_MISMATCH = errors.New("Error writing response in bad order")
@@ -154,4 +157,60 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 		return 0, ERROR_WRITING_MISMATCH
 	}
 	return w.writer.Write(p)
+}
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	if w.writingStatus != WritingBody {
+		return 0, ERROR_WRITING_MISMATCH
+	}
+	_, err := w.writer.Write(fmt.Appendf(nil, "%X\r\n", len(p)))
+	if err != nil {
+		return 0, err
+	}
+	_, err = w.writer.Write(p)
+	if err != nil {
+		return 0, err
+	}
+	_, err = w.writer.Write([]byte("\r\n"))
+	if err != nil {
+		return 0, err
+	}
+
+	return len(p), nil
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	if w.writingStatus != WritingBody {
+		return 0, ERROR_WRITING_MISMATCH
+	}
+
+	data := []byte("0\r\n")
+
+	numBytesWritten, err := w.writer.Write(data)
+	w.writingStatus = WritingTrailers
+
+	return numBytesWritten, err
+}
+
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+	if w.writingStatus != WritingTrailers {
+		return ERROR_WRITING_MISMATCH
+	}
+
+	trailersData := []byte{}
+	for trailerKey, trailerVal := range h {
+		trailersData = fmt.Appendf(trailersData, "%s: %s\r\n", trailerKey, trailerVal)
+	}
+	trailersData = fmt.Append(trailersData, "\r\n")
+
+	numBytesWritten, err := w.writer.Write(trailersData)
+	if err != nil {
+		return fmt.Errorf("Error while writing into writer: %w", err)
+	}
+
+	if numBytesWritten != len(trailersData) {
+		return ERROR_LEN_MISSMATCH
+	}
+
+	return nil
 }
