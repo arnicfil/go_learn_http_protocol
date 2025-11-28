@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"fmt"
@@ -87,7 +88,12 @@ func handler(w *response.Writer, req *request.Request) *server.HandlerError {
 	} else if strings.Contains(target, "httpbin") {
 		err := handleChunks(w, req)
 		return err
+	} else if strings.Contains(target, "videochunked") {
+		fmt.Println("Streaming video chunked")
+		err := handleVideoChunks(w)
+		return err
 	} else if strings.Contains(target, "video") {
+		fmt.Println("Streaming video not chunked")
 		err := handleVideo(w)
 		return err
 	}
@@ -199,6 +205,70 @@ func handleVideo(w *response.Writer) *server.HandlerError {
 	trailers := headers.NewHeaders()
 	trailers.Set("X-Content-SHA256", fmt.Sprintf("%X", hash))
 	trailers.Set("X-Content-Length", strconv.Itoa(len(video)))
+	w.WriteTrailers(trailers)
+
+	return nil
+}
+
+func handleVideoChunks(w *response.Writer) *server.HandlerError {
+	file, err := os.Open("assets/vim.mp4")
+	if err != nil {
+		return &server.HandlerError{
+			StatusCode: response.StatusInternalServerError,
+			Message:    *bytes.NewBufferString(err.Error()),
+		}
+	}
+
+	hdrs := response.GetDefaultHeaders(0)
+
+	hdrs.Remove("Content-Length")
+	hdrs.Set("Transfer-Encoding", "chunked")
+	hdrs.Set("Trailer", "X-Content-SHA256")
+	hdrs.Set("Trailer", "X-Content-Length")
+
+	w.WriteStatusLine(response.StatusOK)
+	w.WriteHeaders(hdrs)
+
+	reader := bufio.NewReader(file)
+	buf := make([]byte, 1024)
+	body := bytes.NewBuffer([]byte{})
+
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			body.Write(buf[:n])
+			if _, err := w.WriteChunkedBody(buf[:n]); err != nil {
+				return &server.HandlerError{
+					StatusCode: response.StatusInternalServerError,
+					Message:    *bytes.NewBufferString(err.Error()),
+				}
+			}
+		}
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return &server.HandlerError{
+				StatusCode: response.StatusInternalServerError,
+				Message:    *bytes.NewBufferString(err.Error()),
+			}
+		}
+	}
+
+	_, err = w.WriteChunkedBodyDone()
+	if err != nil {
+		return &server.HandlerError{
+			StatusCode: response.StatusInternalServerError,
+			Message:    *bytes.NewBufferString(err.Error()),
+		}
+	}
+
+	hash := sha256.Sum256(body.Bytes())
+	trailers := headers.NewHeaders()
+	trailers.Set("X-Content-SHA256", fmt.Sprintf("%X", hash))
+	trailers.Set("X-Content-Length", strconv.Itoa(body.Len()))
 	w.WriteTrailers(trailers)
 
 	return nil
