@@ -88,7 +88,7 @@ func handler(w *response.Writer, req *request.Request) *server.HandlerError {
 		err := handleChunks(w, req)
 		return err
 	} else if strings.Contains(target, "video") {
-		err := handleVideo(w, req)
+		err := handleVideo(w)
 		return err
 	}
 
@@ -176,12 +176,30 @@ func handleChunks(w *response.Writer, req *request.Request) *server.HandlerError
 	return nil
 }
 
-func handleVideo(w *response.Writer, req *request.Request) *server.HandlerError {
-	hdrs := response.GetDefaultHeaders(0)
+func handleVideo(w *response.Writer) *server.HandlerError {
+	video, err := os.ReadFile("assets/vim.mp4")
+	if err != nil {
+		return &server.HandlerError{
+			StatusCode: response.StatusInternalServerError,
+			Message:    *bytes.NewBufferString(err.Error()),
+		}
+	}
 
-	hdrs.Remove("Content-Length")
-	hdrs.Set("Transfer-Encoding", "chunked")
+	hdrs := response.GetDefaultHeaders(len(video))
+
+	hdrs.Set("Content-Type", "video/mp4")
 	hdrs.Set("Trailer", "X-Content-SHA256")
 	hdrs.Set("Trailer", "X-Content-Length")
 
+	w.WriteStatusLine(response.StatusOK)
+	w.WriteHeaders(hdrs)
+	w.WriteBody(video)
+
+	hash := sha256.Sum256(video)
+	trailers := headers.NewHeaders()
+	trailers.Set("X-Content-SHA256", fmt.Sprintf("%X", hash))
+	trailers.Set("X-Content-Length", strconv.Itoa(len(video)))
+	w.WriteTrailers(trailers)
+
+	return nil
 }
