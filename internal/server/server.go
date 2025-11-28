@@ -20,7 +20,7 @@ type Server struct {
 	HandlerFunc Handler
 }
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request) *HandlerError
 
 type HandlerError struct {
 	StatusCode response.StatusCode
@@ -73,23 +73,24 @@ func (s *Server) handle(conn net.Conn) {
 	defer s.Wg.Done()
 	defer conn.Close()
 
+	responseWriter := response.NewWriter(conn)
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
 		fmt.Printf("Error while reading from reader: %v", err)
+		responseWriter.WriteStatusLine(response.StatusBadRequest)
+		responseWriter.WriteHeaders(response.GetDefaultHeaders(0))
 		return
 	}
 
-	buffer := bytes.NewBuffer(nil)
-	herr := s.HandlerFunc(buffer, req)
+	herr := s.HandlerFunc(responseWriter, req)
 	if herr != nil {
 		err = handleError(conn, herr)
 		if err != nil {
 			fmt.Printf("Error while returning error: %v", err)
 			return
 		}
-	} else {
-		writeResponse(conn, response.StatusOK, buffer)
 	}
+
 }
 
 func writeResponse(w io.Writer, statusCode response.StatusCode, buffer *bytes.Buffer) error {

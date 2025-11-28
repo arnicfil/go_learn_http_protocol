@@ -12,26 +12,48 @@ import (
 type StatusCode int
 
 const (
-	StatusOK                                   StatusCode = 200
-	StatusBadRequest                   StatusCode = 400
+	StatusOK                  StatusCode = 200
+	StatusBadRequest          StatusCode = 400
 	StatusInternalServerError StatusCode = 500
 )
 
+type StatusWriter int
+
+const (
+	WritingStatusLine StatusWriter = iota
+	WritingHeaders
+	WritingBody
+)
+
+type Writer struct {
+	writer        io.Writer
+	writingStatus StatusWriter
+}
+
+func NewWriter(w io.Writer) *Writer {
+	return &Writer{
+		writer:        w,
+		writingStatus: WritingStatusLine,
+	}
+}
+
 var ERROR_LEN_MISSMATCH = errors.New("Error writing len mismatch")
+var ERROR_WRITING_MISMATCH = errors.New("Error writing response in bad order")
 
 func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
-	var err error = nil
+	statusLine := []byte("HTTP/1.1 ")
 	switch statusCode {
 	case StatusOK:
-		_, err = w.Write([]byte("HTTP/1.1 200 OK\r\n"))
+		statusLine = fmt.Appendf(statusLine, "%d OK\r\n", statusCode)
 	case StatusBadRequest:
-		_, err = w.Write([]byte("HTTP/1.1 400 Bad Request\r\n"))
+		statusLine = fmt.Appendf(statusLine, "%d Bad Request\r\n", statusCode)
 	case StatusInternalServerError:
-		_, err = w.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n"))
+		statusLine = fmt.Appendf(statusLine, "%d Internal Server Error\r\n", statusCode)
 	default:
-		_, err = w.Write(fmt.Appendf(nil, "HTTP/1.1 %d\r\n", statusCode))
+		statusLine = fmt.Appendf(nil, "HTTP/1.1 %d\r\n", statusCode)
 	}
 
+	_, err := w.Write(statusLine)
 	if err != nil {
 		return fmt.Errorf("Error while writing to writer: %w", err)
 	}
@@ -49,24 +71,18 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 }
 
 func WriteHeaders(w io.Writer, hdrs headers.Headers) error {
+	headersData := []byte{}
 	for headerKey, headerVal := range hdrs {
-		data := fmt.Appendf(nil, "%s: %s\r\n", headerKey, headerVal)
-		numBytesWritten, err := w.Write(data)
-		if err != nil {
-			return fmt.Errorf("Error while writing into writer: %w", err)
-		}
-
-		if numBytesWritten != len(data) {
-			return ERROR_LEN_MISSMATCH
-		}
+		headersData = fmt.Appendf(headersData, "%s: %s\r\n", headerKey, headerVal)
 	}
+	headersData = fmt.Append(headersData, "\r\n")
 
-	numBytesWritten, err := w.Write([]byte("\r\n"))
+	numBytesWritten, err := w.Write(headersData)
 	if err != nil {
 		return fmt.Errorf("Error while writing into writer: %w", err)
 	}
 
-	if numBytesWritten != 2 {
+	if numBytesWritten != len(headersData) {
 		return ERROR_LEN_MISSMATCH
 	}
 
@@ -84,4 +100,58 @@ func WriteBody(w io.Writer, data []byte) error {
 	}
 
 	return nil
+}
+
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	if w.writingStatus != WritingStatusLine {
+		return ERROR_WRITING_MISMATCH
+	}
+
+	statusLine := []byte("HTTP/1.1 ")
+	switch statusCode {
+	case StatusOK:
+		statusLine = fmt.Appendf(statusLine, "%d OK\r\n", statusCode)
+	case StatusBadRequest:
+		statusLine = fmt.Appendf(statusLine, "%d Bad Request\r\n", statusCode)
+	case StatusInternalServerError:
+		statusLine = fmt.Appendf(statusLine, "%d Internal Server Error\r\n", statusCode)
+	default:
+		statusLine = fmt.Appendf(nil, "HTTP/1.1 %d\r\n", statusCode)
+	}
+
+	w.writingStatus = WritingHeaders
+	_, err := w.writer.Write(statusLine)
+	if err != nil {
+		return fmt.Errorf("Error while writing statusLine: %w", err)
+	}
+	return nil
+}
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+	if w.writingStatus != WritingHeaders {
+		return ERROR_WRITING_MISMATCH
+	}
+
+	headersData := []byte{}
+	for headerKey, headerVal := range headers {
+		headersData = fmt.Appendf(headersData, "%s: %s\r\n", headerKey, headerVal)
+	}
+	headersData = fmt.Append(headersData, "\r\n")
+
+	w.writingStatus = WritingBody
+	numBytesWritten, err := w.writer.Write(headersData)
+	if err != nil {
+		return fmt.Errorf("Error while writing into writer: %w", err)
+	}
+
+	if numBytesWritten != len(headersData) {
+		return ERROR_LEN_MISSMATCH
+	}
+
+	return nil
+}
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.writingStatus != WritingBody {
+		return 0, ERROR_WRITING_MISMATCH
+	}
+	return w.writer.Write(p)
 }
